@@ -128,7 +128,7 @@ class ZoomMonitor():
         if not modal_title:
             return
 
-        if modal_title.text_content() == "This meeting has been ended by host":
+        if await modal_title.text_content() == "This meeting has been ended by host":
             self._meeting_ended = True  # Don't try logging out later
             raise MeetingEndedException()
 
@@ -201,7 +201,38 @@ class ZoomMonitor():
         # If we get here, none of our attempts opened the participants list.
         raise ValueError(
             f"Could not open participants list after {attempt + 1} attempts")
+    
+    async def _open_chat(self):
+        """
+        Open the chat panel.
+        """
+        for attempt in range(5):
+            button = self._driver.get_by_role("button", name="open the chat panel")
+            if not button:
+                self._logger.info("Could not find chat button.")
+                await asyncio.sleep(1)
+                continue  # Go to the next attempt
 
+            await button.click()
+            self._logger.debug("chat clicked")
+
+            # Now that we've clicked the chat list without raising
+            # an exception, wait until it shows up. If it doesn't show up
+            # yet, it might be that we've highlighted the button but
+            # haven't properly clicked it, and the next iteration's attempt
+            # will succeed.
+            chat = await self._driver.query_selector(".chat-header__title")
+            if not chat:
+                self._logger.info("timed out waiting for chat,"
+                                  " will try clicking again soon.")
+                continue  # Go to the next attempt
+            self._logger.info("chat opened")
+            return  # Success!
+
+        # If we get here, none of our attempts opened the chat.
+        raise ValueError(
+            f"Could not open chat after {attempt + 1} attempts")
+    
     async def clean_up(self):
         """
         Leave the meeting and shut down the web server.
@@ -236,3 +267,6 @@ class ZoomMonitor():
             "//*[@class='participants-wrapper__inner']"
             "//*[contains(@class, '270b')]")
         return len(hands)
+
+    async def send_message(self):
+        await self._open_chat()
