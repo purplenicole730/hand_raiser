@@ -279,15 +279,9 @@ class ZoomMonitor():
 
         await chatBoxEditor.fill(INTRO_MSG)
 
-        # await self._driver.get_by_role("button", name="send").click()
-        try:
-            thing = self._driver.get_by_role("button", name="send", exact=True)
-            self._logger.info('found send button')
-            await thing.click()
-            self._logger.info("click send")
-        except Exception as e:
-            self._logger.error('got an exception %s', e)
-            raise e
+        sendMsgBtn = self._driver.get_by_role("button", name="send", exact=True)
+        await sendMsgBtn.click()
+        self._logger.info("introduced myself to everyone :D")
 
     async def send_message(self):
         await self._open_chat()

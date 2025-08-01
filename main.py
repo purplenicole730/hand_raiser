@@ -25,10 +25,10 @@ async def main():
             introduced = False
             while True:
                 if not introduced:
-                    # time_minute = datetime.now().minute
-                    # if time_minute == 5 or time_minute == 35:
-                    await zoom.send_message()
-                    introduced = True
+                    time_minute = datetime.now().minute
+                    if time_minute == 5 or time_minute == 35:
+                        await zoom.send_message()
+                        introduced = True
                 count = await zoom.count_hands()
                 await audience.set_count(count)
                 await asyncio.sleep(0.5)
