@@ -16,6 +16,10 @@ except ImportError:
 # XPath path expression to find participants button node
 PARTICIPANTS_BTN = "//*[contains(@class, 'SvgParticipants')]"
 
+INTRO_MSG = """Hello to all the new employees! This is the hand-raiser
+bot (HRB), which helps remote employees have a physical presence. If
+you have a question for the presenter, feel free to use Zoom's `Raise
+Hand` feature to raise a physical hand in the office!""".replace("\n", " ")
 
 @asynccontextmanager
 async def monitor_zoom(url, log_level):
@@ -201,7 +205,7 @@ class ZoomMonitor():
         # If we get here, none of our attempts opened the participants list.
         raise ValueError(
             f"Could not open participants list after {attempt + 1} attempts")
-    
+
     async def _open_chat(self):
         """
         Open the chat panel.
@@ -221,8 +225,8 @@ class ZoomMonitor():
             # yet, it might be that we've highlighted the button but
             # haven't properly clicked it, and the next iteration's attempt
             # will succeed.
-            chat = await self._driver.query_selector(".chat-header__title")
-            if not chat:
+            chat_header = await self._driver.query_selector(".chat-header__title")
+            if not chat_header:
                 self._logger.info("timed out waiting for chat,"
                                   " will try clicking again soon.")
                 continue  # Go to the next attempt
@@ -232,7 +236,7 @@ class ZoomMonitor():
         # If we get here, none of our attempts opened the chat.
         raise ValueError(
             f"Could not open chat after {attempt + 1} attempts")
-    
+
     async def clean_up(self):
         """
         Leave the meeting and shut down the web server.
@@ -268,5 +272,23 @@ class ZoomMonitor():
             "//*[contains(@class, '270b')]")
         return len(hands)
 
+    async def _enter_message(self):
+        chatBoxEditor = await self._driver.query_selector('.ProseMirror')
+        if not chatBoxEditor:
+            raise ValueError("No chatbox editor found")
+
+        await chatBoxEditor.fill(INTRO_MSG)
+
+        # await self._driver.get_by_role("button", name="send").click()
+        try:
+            thing = self._driver.get_by_role("button", name="send", exact=True)
+            self._logger.info('found send button')
+            await thing.click()
+            self._logger.info("click send")
+        except Exception as e:
+            self._logger.error('got an exception %s', e)
+            raise e
+
     async def send_message(self):
         await self._open_chat()
+        await self._enter_message()
