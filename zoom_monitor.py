@@ -16,6 +16,11 @@ except ImportError:
 # XPath path expression to find participants button node
 PARTICIPANTS_BTN = "//*[contains(@class, 'SvgParticipants')]"
 
+INTRO_MSG = """This is the hand-raiser bot (HRB), which helps remote
+employees have a physical presence. If you have a question for the presenter,
+feel free to use Zoom's `Raise Hand` feature to raise a physical hand in the
+office!""".replace("\n", " ")
+
 
 @asynccontextmanager
 async def monitor_zoom(url, log_level):
@@ -26,6 +31,8 @@ async def monitor_zoom(url, log_level):
         await zoom._init(p, url, log_level)
         try:
             yield zoom
+        except Exception as e:
+            zoom._logger.error(e)
         finally:
             await zoom.clean_up()
 
@@ -128,7 +135,7 @@ class ZoomMonitor():
         if not modal_title:
             return
 
-        if modal_title.text_content() == "This meeting has been ended by host":
+        if await modal_title.text_content() == "This meeting has been ended by host":
             self._meeting_ended = True  # Don't try logging out later
             raise MeetingEndedException()
 
@@ -202,6 +209,36 @@ class ZoomMonitor():
         raise ValueError(
             f"Could not open participants list after {attempt + 1} attempts")
 
+    async def _open_chat(self):
+        """
+        Open the chat panel.
+        """
+        for attempt in range(5):
+            button = self._driver.get_by_role("button", name="open the chat panel")
+            if not button:
+                self._logger.info("Could not find chat button.")
+                await asyncio.sleep(1)
+                continue  # Go to the next attempt
+
+            await button.click()
+            self._logger.debug("chat clicked")
+
+            # Now that we've clicked the chat list without raising
+            # an exception, wait until it shows up. If it doesn't show up
+            # yet, it might be that we've highlighted the button but
+            # haven't properly clicked it, and the next iteration's attempt
+            # will succeed.
+            chat_header = await self._driver.query_selector(".chat-header__title")
+            if chat_header:
+                self._logger.info("chat opened")
+                return  # Success!
+            self._logger.info("timed out waiting for chat, "
+                              "will try clicking again soon.")
+
+        # If we get here, none of our attempts opened the chat.
+        raise ValueError(
+            f"Could not open chat after {attempt + 1} attempts")
+
     async def clean_up(self):
         """
         Leave the meeting and shut down the web server.
@@ -236,3 +273,18 @@ class ZoomMonitor():
             "//*[@class='participants-wrapper__inner']"
             "//*[contains(@class, '270b')]")
         return len(hands)
+
+    async def _enter_message(self):
+        chatBoxEditor = await self._driver.query_selector('.ProseMirror')
+        if not chatBoxEditor:
+            raise ValueError("No chatbox editor found")
+
+        await chatBoxEditor.fill(INTRO_MSG)
+
+        sendMsgBtn = self._driver.get_by_role("button", name="send", exact=True)
+        await sendMsgBtn.click()
+        self._logger.info("introduced myself to everyone :D")
+
+    async def send_introduction(self):
+        await self._open_chat()
+        await self._enter_message()
